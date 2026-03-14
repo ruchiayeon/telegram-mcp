@@ -1,6 +1,6 @@
 """tg_media.py — 미디어 전송 도구 (9개)"""
 
-from telegram import mcp, _tg, _err
+from telegram import mcp, _tg, _err, get_chat_id, DEFAULT_USER
 
 from typing import Optional
 from pydantic import BaseModel, Field, ConfigDict
@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 class SendPhotoInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-    chat_id:    int           = Field(..., description="채팅 ID")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     photo:      str           = Field(..., description="이미지 URL 또는 file_id")
     caption:    Optional[str] = Field(default=None, description="이미지 설명 (최대 1024자)", max_length=1024)
     parse_mode: Optional[str] = Field(default="Markdown", description="'Markdown' 또는 'HTML'")
@@ -18,7 +18,7 @@ class SendPhotoInput(BaseModel):
 
 class SendDocumentInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-    chat_id:    int           = Field(..., description="채팅 ID")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     document:   str           = Field(..., description="파일 URL 또는 file_id")
     caption:    Optional[str] = Field(default=None, description="파일 설명 (최대 1024자)", max_length=1024)
     parse_mode: Optional[str] = Field(default="Markdown", description="'Markdown' 또는 'HTML'")
@@ -26,7 +26,7 @@ class SendDocumentInput(BaseModel):
 
 class SendVideoInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-    chat_id:    int           = Field(..., description="채팅 ID")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     video:      str           = Field(..., description="동영상 URL 또는 file_id")
     caption:    Optional[str] = Field(default=None, description="동영상 설명 (최대 1024자)", max_length=1024)
     parse_mode: Optional[str] = Field(default="Markdown", description="'Markdown' 또는 'HTML'")
@@ -37,7 +37,7 @@ class SendVideoInput(BaseModel):
 
 class SendAudioInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-    chat_id:    int           = Field(..., description="채팅 ID")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     audio:      str           = Field(..., description="오디오 URL 또는 file_id")
     caption:    Optional[str] = Field(default=None, description="오디오 설명 (최대 1024자)", max_length=1024)
     parse_mode: Optional[str] = Field(default="Markdown", description="'Markdown' 또는 'HTML'")
@@ -48,7 +48,7 @@ class SendAudioInput(BaseModel):
 
 class SendVoiceInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-    chat_id:    int           = Field(..., description="채팅 ID")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     voice:      str           = Field(..., description="음성 파일 URL 또는 file_id (.ogg OPUS)")
     caption:    Optional[str] = Field(default=None, description="음성 설명 (최대 1024자)", max_length=1024)
     parse_mode: Optional[str] = Field(default="Markdown", description="'Markdown' 또는 'HTML'")
@@ -57,7 +57,7 @@ class SendVoiceInput(BaseModel):
 
 class SendAnimationInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-    chat_id:    int           = Field(..., description="채팅 ID")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     animation:  str           = Field(..., description="GIF/MP4 URL 또는 file_id")
     caption:    Optional[str] = Field(default=None, description="설명 (최대 1024자)", max_length=1024)
     parse_mode: Optional[str] = Field(default="Markdown", description="'Markdown' 또는 'HTML'")
@@ -68,7 +68,7 @@ class SendAnimationInput(BaseModel):
 
 class SendVideoNoteInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    chat_id:    int           = Field(..., description="채팅 ID")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     video_note: str           = Field(..., description="둥근 비디오 file_id 또는 URL")
     duration:   Optional[int] = Field(default=None, description="비디오 길이(초)")
     length:     Optional[int] = Field(default=None, description="비디오 지름(px)")
@@ -84,13 +84,13 @@ class MediaItem(BaseModel):
 
 class SendMediaGroupInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    chat_id: int             = Field(..., description="채팅 ID")
-    media:   list[MediaItem] = Field(..., description="미디어 배열 (2~10개)", min_length=2, max_length=10)
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
+    media: list[MediaItem]   = Field(..., description="미디어 배열 (2~10개)", min_length=2, max_length=10)
 
 
 class SendStickerInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    chat_id: int = Field(..., description="채팅 ID")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     sticker: str = Field(..., description="스티커 file_id 또는 URL (.webp/.tgs/.webm)")
 
 
@@ -114,11 +114,12 @@ async def telegram_send_photo(params: SendPhotoInput) -> str:
         str: 전송 성공 메시지 또는 에러
     """
     try:
-        payload: dict = {"chat_id": params.chat_id, "photo": params.photo}
+        chat_id = get_chat_id(params.user)
+        payload: dict = {"chat_id": chat_id, "photo": params.photo}
         if params.caption:
             payload["caption"]    = params.caption
             payload["parse_mode"] = params.parse_mode
-        result = await _tg("sendPhoto", payload)
+        result = await _tg("sendPhoto", payload, user=params.user)
         msg_id = result.get("result", {}).get("message_id", "?")
         return f"🖼️ 사진 전송 완료 (message_id: {msg_id})"
     except Exception as e:
@@ -143,11 +144,12 @@ async def telegram_send_document(params: SendDocumentInput) -> str:
         str: 전송 성공 메시지 또는 에러
     """
     try:
-        payload: dict = {"chat_id": params.chat_id, "document": params.document}
+        chat_id = get_chat_id(params.user)
+        payload: dict = {"chat_id": chat_id, "document": params.document}
         if params.caption:
             payload["caption"]    = params.caption
             payload["parse_mode"] = params.parse_mode
-        result = await _tg("sendDocument", payload)
+        result = await _tg("sendDocument", payload, user=params.user)
         msg_id = result.get("result", {}).get("message_id", "?")
         return f"📎 파일 전송 완료 (message_id: {msg_id})"
     except Exception as e:
@@ -161,7 +163,8 @@ async def telegram_send_document(params: SendDocumentInput) -> str:
 async def telegram_send_video(params: SendVideoInput) -> str:
     """텔레그램 채팅에 동영상을 전송합니다. URL 또는 file_id 사용 가능."""
     try:
-        payload: dict = {"chat_id": params.chat_id, "video": params.video}
+        chat_id = get_chat_id(params.user)
+        payload: dict = {"chat_id": chat_id, "video": params.video}
         if params.caption:
             payload["caption"]    = params.caption
             payload["parse_mode"] = params.parse_mode
@@ -171,7 +174,7 @@ async def telegram_send_video(params: SendVideoInput) -> str:
             payload["width"] = params.width
         if params.height is not None:
             payload["height"] = params.height
-        result = await _tg("sendVideo", payload)
+        result = await _tg("sendVideo", payload, user=params.user)
         msg_id = result.get("result", {}).get("message_id", "?")
         return f"🎬 동영상 전송 완료 (message_id: {msg_id})"
     except Exception as e:
@@ -185,7 +188,8 @@ async def telegram_send_video(params: SendVideoInput) -> str:
 async def telegram_send_audio(params: SendAudioInput) -> str:
     """텔레그램 채팅에 오디오 파일을 전송합니다. URL 또는 file_id 사용 가능."""
     try:
-        payload: dict = {"chat_id": params.chat_id, "audio": params.audio}
+        chat_id = get_chat_id(params.user)
+        payload: dict = {"chat_id": chat_id, "audio": params.audio}
         if params.caption:
             payload["caption"]    = params.caption
             payload["parse_mode"] = params.parse_mode
@@ -195,7 +199,7 @@ async def telegram_send_audio(params: SendAudioInput) -> str:
             payload["performer"] = params.performer
         if params.title is not None:
             payload["title"] = params.title
-        result = await _tg("sendAudio", payload)
+        result = await _tg("sendAudio", payload, user=params.user)
         msg_id = result.get("result", {}).get("message_id", "?")
         return f"🎵 오디오 전송 완료 (message_id: {msg_id})"
     except Exception as e:
@@ -209,13 +213,14 @@ async def telegram_send_audio(params: SendAudioInput) -> str:
 async def telegram_send_voice(params: SendVoiceInput) -> str:
     """텔레그램 채팅에 음성 메시지를 전송합니다. .ogg OPUS 형식."""
     try:
-        payload: dict = {"chat_id": params.chat_id, "voice": params.voice}
+        chat_id = get_chat_id(params.user)
+        payload: dict = {"chat_id": chat_id, "voice": params.voice}
         if params.caption:
             payload["caption"]    = params.caption
             payload["parse_mode"] = params.parse_mode
         if params.duration is not None:
             payload["duration"] = params.duration
-        result = await _tg("sendVoice", payload)
+        result = await _tg("sendVoice", payload, user=params.user)
         msg_id = result.get("result", {}).get("message_id", "?")
         return f"🎤 음성 메시지 전송 완료 (message_id: {msg_id})"
     except Exception as e:
@@ -229,7 +234,8 @@ async def telegram_send_voice(params: SendVoiceInput) -> str:
 async def telegram_send_animation(params: SendAnimationInput) -> str:
     """텔레그램 채팅에 GIF 또는 무음 MP4 애니메이션을 전송합니다."""
     try:
-        payload: dict = {"chat_id": params.chat_id, "animation": params.animation}
+        chat_id = get_chat_id(params.user)
+        payload: dict = {"chat_id": chat_id, "animation": params.animation}
         if params.caption:
             payload["caption"]    = params.caption
             payload["parse_mode"] = params.parse_mode
@@ -239,7 +245,7 @@ async def telegram_send_animation(params: SendAnimationInput) -> str:
             payload["width"] = params.width
         if params.height is not None:
             payload["height"] = params.height
-        result = await _tg("sendAnimation", payload)
+        result = await _tg("sendAnimation", payload, user=params.user)
         msg_id = result.get("result", {}).get("message_id", "?")
         return f"🎞️ 애니메이션 전송 완료 (message_id: {msg_id})"
     except Exception as e:
@@ -253,12 +259,13 @@ async def telegram_send_animation(params: SendAnimationInput) -> str:
 async def telegram_send_video_note(params: SendVideoNoteInput) -> str:
     """텔레그램 채팅에 둥근 비디오 메시지를 전송합니다."""
     try:
-        payload: dict = {"chat_id": params.chat_id, "video_note": params.video_note}
+        chat_id = get_chat_id(params.user)
+        payload: dict = {"chat_id": chat_id, "video_note": params.video_note}
         if params.duration is not None:
             payload["duration"] = params.duration
         if params.length is not None:
             payload["length"] = params.length
-        result = await _tg("sendVideoNote", payload)
+        result = await _tg("sendVideoNote", payload, user=params.user)
         msg_id = result.get("result", {}).get("message_id", "?")
         return f"⏺️ 둥근 비디오 전송 완료 (message_id: {msg_id})"
     except Exception as e:
@@ -280,10 +287,11 @@ async def telegram_send_media_group(params: SendMediaGroupInput) -> str:
             if item.parse_mode:
                 m["parse_mode"] = item.parse_mode
             media_list.append(m)
+        chat_id = get_chat_id(params.user)
         result = await _tg("sendMediaGroup", {
-            "chat_id": params.chat_id,
+            "chat_id": chat_id,
             "media":   media_list,
-        })
+        }, user=params.user)
         msgs = result.get("result", [])
         ids  = [str(m.get("message_id", "?")) for m in msgs]
         return f"🖼️ 미디어 그룹 전송 완료 ({len(ids)}개, message_ids: {', '.join(ids)})"
@@ -298,10 +306,11 @@ async def telegram_send_media_group(params: SendMediaGroupInput) -> str:
 async def telegram_send_sticker(params: SendStickerInput) -> str:
     """텔레그램 채팅에 스티커를 전송합니다. file_id 또는 URL 사용 가능."""
     try:
+        chat_id = get_chat_id(params.user)
         result = await _tg("sendSticker", {
-            "chat_id": params.chat_id,
+            "chat_id": chat_id,
             "sticker": params.sticker,
-        })
+        }, user=params.user)
         msg_id = result.get("result", {}).get("message_id", "?")
         return f"😀 스티커 전송 완료 (message_id: {msg_id})"
     except Exception as e:

@@ -1,9 +1,8 @@
 """tg_interactive.py — 인터랙티브/유틸 도구 (9개)"""
 
-from telegram import mcp, _tg, _err
+from telegram import mcp, _tg, _err, get_chat_id, DEFAULT_USER
 
 import json
-import os
 from typing import Optional
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -12,7 +11,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 class SendPollInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-    chat_id:      int       = Field(..., description="채팅 ID")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     question:     str       = Field(..., description="투표 질문 (최대 300자)", min_length=1, max_length=300)
     options:      list[str] = Field(..., description="선택지 목록 (2~10개)", min_length=2, max_length=10)
     is_anonymous: bool      = Field(default=True, description="익명 투표 여부")
@@ -22,7 +21,7 @@ class SendPollInput(BaseModel):
 class SendInlineKeyboardInput(BaseModel):
     """인라인 버튼이 붙은 메시지 전송"""
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-    chat_id:    int                   = Field(..., description="채팅 ID")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     text:       str                   = Field(..., description="메시지 내용", min_length=1, max_length=4096)
     buttons:    list[list[dict]]      = Field(
         ...,
@@ -37,6 +36,7 @@ class SendInlineKeyboardInput(BaseModel):
 
 class AnswerCallbackQueryInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     callback_query_id: str           = Field(..., description="콜백 쿼리 ID")
     text:              Optional[str] = Field(default=None, description="사용자에게 보여줄 알림 텍스트")
     show_alert:        bool          = Field(default=False, description="True이면 팝업 알림, False이면 토스트")
@@ -46,14 +46,14 @@ class AnswerCallbackQueryInput(BaseModel):
 
 class SendLocationInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    chat_id:   int   = Field(..., description="채팅 ID")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     latitude:  float = Field(..., description="위도 (예: 37.5665)", ge=-90.0, le=90.0)
     longitude: float = Field(..., description="경도 (예: 126.9780)", ge=-180.0, le=180.0)
 
 
 class SendVenueInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-    chat_id:        int           = Field(..., description="채팅 ID")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     latitude:       float         = Field(..., description="위도", ge=-90.0, le=90.0)
     longitude:      float         = Field(..., description="경도", ge=-180.0, le=180.0)
     title:          str           = Field(..., description="장소 이름")
@@ -63,7 +63,7 @@ class SendVenueInput(BaseModel):
 
 class SendContactInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-    chat_id:      int           = Field(..., description="채팅 ID")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     phone_number: str           = Field(..., description="연락처 전화번호")
     first_name:   str           = Field(..., description="연락처 이름")
     last_name:    Optional[str] = Field(default=None, description="연락처 성")
@@ -72,13 +72,13 @@ class SendContactInput(BaseModel):
 
 class SendDiceInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    chat_id: int           = Field(..., description="채팅 ID")
-    emoji:   Optional[str] = Field(default="🎲", description="이모지: 🎲🎯🏀⚽🎳🎰")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
+    emoji: Optional[str] = Field(default="🎲", description="이모지: 🎲🎯🏀⚽🎳🎰")
 
 
 class SetMessageReactionInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    chat_id:    int       = Field(..., description="채팅 ID")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     message_id: int       = Field(..., description="리액션 대상 메시지 ID")
     reaction:   list[str] = Field(default_factory=list, description="이모지 리스트 (빈 배열이면 리액션 제거)")
     is_big:     bool      = Field(default=False, description="큰 리액션 애니메이션 여부")
@@ -86,6 +86,7 @@ class SetMessageReactionInput(BaseModel):
 
 class GetFileInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     file_id: str = Field(..., description="Telegram 파일 ID")
 
 
@@ -110,13 +111,14 @@ async def telegram_send_poll(params: SendPollInput) -> str:
         str: 투표 생성 성공 메시지 또는 에러
     """
     try:
+        chat_id = get_chat_id(params.user)
         result = await _tg("sendPoll", {
-            "chat_id":                 params.chat_id,
+            "chat_id":                 chat_id,
             "question":                params.question,
             "options":                 params.options,
             "is_anonymous":            params.is_anonymous,
             "allows_multiple_answers": params.allows_multiple_answers,
-        })
+        }, user=params.user)
         msg_id = result.get("result", {}).get("message_id", "?")
         return f"📊 투표 생성 완료 (message_id: {msg_id})"
     except Exception as e:
@@ -145,12 +147,13 @@ async def telegram_send_with_buttons(params: SendInlineKeyboardInput) -> str:
         str: 전송 성공 메시지 또는 에러
     """
     try:
+        chat_id = get_chat_id(params.user)
         result = await _tg("sendMessage", {
-            "chat_id":    params.chat_id,
+            "chat_id":    chat_id,
             "text":       params.text,
             "parse_mode": params.parse_mode,
             "reply_markup": {"inline_keyboard": params.buttons},
-        })
+        }, user=params.user)
         msg_id = result.get("result", {}).get("message_id", "?")
         return f"⌨️ 버튼 메시지 전송 완료 (message_id: {msg_id})"
     except Exception as e:
@@ -172,7 +175,7 @@ async def telegram_answer_callback_query(params: AnswerCallbackQueryInput) -> st
             payload["url"] = params.url
         if params.cache_time is not None:
             payload["cache_time"] = params.cache_time
-        await _tg("answerCallbackQuery", payload)
+        await _tg("answerCallbackQuery", payload, user=params.user)
         return f"✅ 콜백 쿼리 응답 완료 (id: {params.callback_query_id[:8]}…)"
     except Exception as e:
         return _err(e)
@@ -195,11 +198,12 @@ async def telegram_send_location(params: SendLocationInput) -> str:
         str: 전송 성공 메시지 또는 에러
     """
     try:
+        chat_id = get_chat_id(params.user)
         result = await _tg("sendLocation", {
-            "chat_id":   params.chat_id,
+            "chat_id":   chat_id,
             "latitude":  params.latitude,
             "longitude": params.longitude,
-        })
+        }, user=params.user)
         msg_id = result.get("result", {}).get("message_id", "?")
         return f"📍 위치 전송 완료 (message_id: {msg_id})"
     except Exception as e:
@@ -213,8 +217,9 @@ async def telegram_send_location(params: SendLocationInput) -> str:
 async def telegram_send_venue(params: SendVenueInput) -> str:
     """텔레그램 채팅에 장소(위치+이름+주소)를 전송합니다."""
     try:
+        chat_id = get_chat_id(params.user)
         payload: dict = {
-            "chat_id":   params.chat_id,
+            "chat_id":   chat_id,
             "latitude":  params.latitude,
             "longitude": params.longitude,
             "title":     params.title,
@@ -222,7 +227,7 @@ async def telegram_send_venue(params: SendVenueInput) -> str:
         }
         if params.foursquare_id is not None:
             payload["foursquare_id"] = params.foursquare_id
-        result = await _tg("sendVenue", payload)
+        result = await _tg("sendVenue", payload, user=params.user)
         msg_id = result.get("result", {}).get("message_id", "?")
         return f"📍 장소 전송 완료 (message_id: {msg_id})"
     except Exception as e:
@@ -236,8 +241,9 @@ async def telegram_send_venue(params: SendVenueInput) -> str:
 async def telegram_send_contact(params: SendContactInput) -> str:
     """텔레그램 채팅에 연락처(전화번호+이름)를 전송합니다."""
     try:
+        chat_id = get_chat_id(params.user)
         payload: dict = {
-            "chat_id":      params.chat_id,
+            "chat_id":      chat_id,
             "phone_number": params.phone_number,
             "first_name":   params.first_name,
         }
@@ -245,7 +251,7 @@ async def telegram_send_contact(params: SendContactInput) -> str:
             payload["last_name"] = params.last_name
         if params.vcard is not None:
             payload["vcard"] = params.vcard
-        result = await _tg("sendContact", payload)
+        result = await _tg("sendContact", payload, user=params.user)
         msg_id = result.get("result", {}).get("message_id", "?")
         return f"📇 연락처 전송 완료 (message_id: {msg_id})"
     except Exception as e:
@@ -259,10 +265,11 @@ async def telegram_send_contact(params: SendContactInput) -> str:
 async def telegram_send_dice(params: SendDiceInput) -> str:
     """텔레그램 채팅에 주사위/슬롯 등 랜덤 애니메이션을 전송합니다."""
     try:
-        payload: dict = {"chat_id": params.chat_id}
+        chat_id = get_chat_id(params.user)
+        payload: dict = {"chat_id": chat_id}
         if params.emoji:
             payload["emoji"] = params.emoji
-        result = await _tg("sendDice", payload)
+        result = await _tg("sendDice", payload, user=params.user)
         dice   = result.get("result", {}).get("dice", {})
         value  = dice.get("value", "?")
         return f"🎲 주사위 전송 완료 (결과: {value})"
@@ -277,13 +284,14 @@ async def telegram_send_dice(params: SendDiceInput) -> str:
 async def telegram_set_message_reaction(params: SetMessageReactionInput) -> str:
     """메시지에 이모지 리액션을 설정하거나 제거합니다."""
     try:
+        chat_id = get_chat_id(params.user)
         reaction_objs = [{"type": "emoji", "emoji": e} for e in params.reaction]
         await _tg("setMessageReaction", {
-            "chat_id":    params.chat_id,
+            "chat_id":    chat_id,
             "message_id": params.message_id,
             "reaction":   reaction_objs,
             "is_big":     params.is_big,
-        })
+        }, user=params.user)
         if params.reaction:
             return f"👍 리액션 설정 완료 ({', '.join(params.reaction)})"
         return "👍 리액션 제거 완료"
@@ -298,10 +306,11 @@ async def telegram_set_message_reaction(params: SetMessageReactionInput) -> str:
 async def telegram_get_file(params: GetFileInput) -> str:
     """file_id로 파일 정보와 다운로드 URL을 조회합니다."""
     try:
-        result    = await _tg("getFile", {"file_id": params.file_id})
+        result    = await _tg("getFile", {"file_id": params.file_id}, user=params.user)
         file_info = result.get("result", {})
         file_path = file_info.get("file_path", "")
-        token     = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        from telegram import get_user_config
+        token     = get_user_config(params.user)["bot_token"]
         download  = f"https://api.telegram.org/file/bot{token}/{file_path}" if file_path else None
         info = {
             "file_id":        file_info.get("file_id"),

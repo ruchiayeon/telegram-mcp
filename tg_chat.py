@@ -1,6 +1,6 @@
 """tg_chat.py — 채팅 정보/관리 도구 (8개)"""
 
-from telegram import mcp, _tg, _err
+from telegram import mcp, _tg, _err, get_chat_id, DEFAULT_USER
 
 import json
 from typing import Optional
@@ -11,40 +11,40 @@ from pydantic import BaseModel, Field, ConfigDict
 
 class GetChatInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    chat_id: int = Field(..., description="조회할 채팅 ID")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
 
 
 class PinMessageInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    chat_id:              int  = Field(..., description="채팅 ID")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     message_id:           int  = Field(..., description="고정할 메시지 ID")
     disable_notification: bool = Field(default=False, description="알림 없이 고정")
 
 
 class UnpinMessageInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    chat_id:    int           = Field(..., description="채팅 ID")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     message_id: Optional[int] = Field(default=None, description="고정 해제할 메시지 ID (None이면 최신 고정 메시지)")
 
 
 class BanUserInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    chat_id:    int           = Field(..., description="그룹/채널 ID")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     user_id:    int           = Field(..., description="차단할 사용자 ID")
     until_date: Optional[int] = Field(default=None, description="차단 해제 Unix 타임스탬프 (None=영구)")
 
 
 class UnbanUserInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    chat_id:        int  = Field(..., description="그룹/채널 ID")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     user_id:        int  = Field(..., description="차단 해제할 사용자 ID")
     only_if_banned: bool = Field(default=True, description="차단된 경우에만 해제")
 
 
 class SendChatActionInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    chat_id: int = Field(..., description="채팅 ID")
-    action:  str = Field(..., description="액션: typing, upload_photo, upload_video, upload_document, record_voice 등")
+    user: Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
+    action: str = Field(..., description="액션: typing, upload_photo, upload_video, upload_document, record_voice 등")
 
 
 # ── 도구 등록 ─────────────────────────────────────────────
@@ -64,7 +64,8 @@ async def telegram_get_chat(params: GetChatInput) -> str:
         str: 채팅 이름, 타입, 멤버 수, 설명 등의 JSON 정보
     """
     try:
-        result = await _tg("getChat", {"chat_id": params.chat_id})
+        chat_id = get_chat_id(params.user)
+        result = await _tg("getChat", {"chat_id": chat_id}, user=params.user)
         chat   = result.get("result", {})
         info   = {
             "id":          chat.get("id"),
@@ -94,7 +95,8 @@ async def telegram_get_chat_members_count(params: GetChatInput) -> str:
         str: 멤버 수 또는 에러
     """
     try:
-        result = await _tg("getChatMemberCount", {"chat_id": params.chat_id})
+        chat_id = get_chat_id(params.user)
+        result = await _tg("getChatMemberCount", {"chat_id": chat_id}, user=params.user)
         count  = result.get("result", 0)
         return f"👥 멤버 수: {count:,}명"
     except Exception as e:
@@ -105,14 +107,17 @@ async def telegram_get_chat_members_count(params: GetChatInput) -> str:
     name="telegram_get_me",
     annotations={"title": "봇 정보 조회", "readOnlyHint": True, "destructiveHint": False},
 )
-async def telegram_get_me() -> str:
+async def telegram_get_me(user: str | None = None) -> str:
     """현재 봇의 기본 정보(이름, username, id 등)를 조회합니다.
+
+    Args:
+        user (str): 사용자 (telegram_config.json에 정의된 사용자 이름)
 
     Returns:
         str: 봇 정보 JSON 또는 에러
     """
     try:
-        result = await _tg("getMe", {})
+        result = await _tg("getMe", {}, user=user)
         bot    = result.get("result", {})
         info   = {
             "id":         bot.get("id"),
@@ -144,11 +149,12 @@ async def telegram_pin_message(params: PinMessageInput) -> str:
         str: 고정 성공 메시지 또는 에러
     """
     try:
+        chat_id = get_chat_id(params.user)
         await _tg("pinChatMessage", {
-            "chat_id":              params.chat_id,
+            "chat_id":              chat_id,
             "message_id":           params.message_id,
             "disable_notification": params.disable_notification,
-        })
+        }, user=params.user)
         return f"📌 메시지 고정 완료 (message_id: {params.message_id})"
     except Exception as e:
         return _err(e)
@@ -170,10 +176,11 @@ async def telegram_unpin_message(params: UnpinMessageInput) -> str:
         str: 고정 해제 성공 메시지 또는 에러
     """
     try:
-        payload: dict = {"chat_id": params.chat_id}
+        chat_id = get_chat_id(params.user)
+        payload: dict = {"chat_id": chat_id}
         if params.message_id is not None:
             payload["message_id"] = params.message_id
-        await _tg("unpinChatMessage", payload)
+        await _tg("unpinChatMessage", payload, user=params.user)
         return "📌 메시지 고정 해제 완료"
     except Exception as e:
         return _err(e)
@@ -196,10 +203,11 @@ async def telegram_ban_user(params: BanUserInput) -> str:
         str: 차단 성공 메시지 또는 에러
     """
     try:
-        payload: dict = {"chat_id": params.chat_id, "user_id": params.user_id}
+        chat_id = get_chat_id(params.user)
+        payload: dict = {"chat_id": chat_id, "user_id": params.user_id}
         if params.until_date is not None:
             payload["until_date"] = params.until_date
-        await _tg("banChatMember", payload)
+        await _tg("banChatMember", payload, user=params.user)
         return f"🚫 사용자 차단 완료 (user_id: {params.user_id})"
     except Exception as e:
         return _err(e)
@@ -222,11 +230,12 @@ async def telegram_unban_user(params: UnbanUserInput) -> str:
         str: 차단 해제 성공 메시지 또는 에러
     """
     try:
+        chat_id = get_chat_id(params.user)
         await _tg("unbanChatMember", {
-            "chat_id":        params.chat_id,
+            "chat_id":        chat_id,
             "user_id":        params.user_id,
             "only_if_banned": params.only_if_banned,
-        })
+        }, user=params.user)
         return f"✅ 사용자 차단 해제 완료 (user_id: {params.user_id})"
     except Exception as e:
         return _err(e)
@@ -239,10 +248,11 @@ async def telegram_unban_user(params: UnbanUserInput) -> str:
 async def telegram_send_chat_action(params: SendChatActionInput) -> str:
     """채팅에 '입력 중...', '파일 업로드 중...' 등 상태 표시를 전송합니다."""
     try:
+        chat_id = get_chat_id(params.user)
         await _tg("sendChatAction", {
-            "chat_id": params.chat_id,
+            "chat_id": chat_id,
             "action":  params.action,
-        })
+        }, user=params.user)
         return f"⏳ 채팅 액션 전송 완료 (action: {params.action})"
     except Exception as e:
         return _err(e)

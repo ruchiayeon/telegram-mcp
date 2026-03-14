@@ -1,6 +1,6 @@
 """tg_messages.py — 메시지 CRUD 도구 (9개)"""
 
-from telegram import mcp, _tg, _err
+from telegram import mcp, _tg, _err, get_chat_id, DEFAULT_USER
 
 import json
 from typing import Optional
@@ -11,20 +11,21 @@ from pydantic import BaseModel, Field, ConfigDict
 
 class SendMessageInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-    chat_id:    int           = Field(..., description="메시지를 보낼 채팅 ID")
+    user:       Optional[str] = Field(default=None, description="메시지를 보낼 사용자 (telegram_config.json에 정의된 사용자 이름)")
     text:       str           = Field(..., description="보낼 메시지 내용 (최대 4096자)", min_length=1, max_length=4096)
     parse_mode: Optional[str] = Field(default="Markdown", description="'Markdown' 또는 'HTML'")
 
 
 class GetUpdatesInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    offset: Optional[int] = Field(default=None, description="이 update_id 이후 메시지만 가져오기 (중복 방지)")
-    limit:  Optional[int] = Field(default=20, description="가져올 메시지 수 (최대 100)", ge=1, le=100)
+    user:   Optional[str]  = Field(default=None, description="조회할 사용자 (telegram_config.json에 정의된 사용자 이름)")
+    offset: Optional[int]  = Field(default=None, description="이 update_id 이후 메시지만 가져오기 (중복 방지)")
+    limit:  Optional[int]  = Field(default=20, description="가져올 메시지 수 (최대 100)", ge=1, le=100)
 
 
 class EditMessageInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-    chat_id:    int           = Field(..., description="채팅 ID")
+    user:       Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     message_id: int           = Field(..., description="수정할 메시지 ID")
     text:       str           = Field(..., description="새 메시지 내용", min_length=1, max_length=4096)
     parse_mode: Optional[str] = Field(default="Markdown", description="'Markdown' 또는 'HTML'")
@@ -32,18 +33,19 @@ class EditMessageInput(BaseModel):
 
 class DeleteMessageInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    chat_id:    int = Field(..., description="채팅 ID")
+    user:       str = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     message_id: int = Field(..., description="삭제할 메시지 ID")
 
 
 class DeleteMessagesInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    chat_id:     int       = Field(..., description="채팅 ID")
+    user:        Optional[str] = Field(default=None, description="사용자 (telegram_config.json에 정의된 사용자 이름)")
     message_ids: list[int] = Field(..., description="삭제할 메시지 ID 목록", min_length=1, max_length=100)
 
 
 class ForwardMessageInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    user:         Optional[str] = Field(default=None, description="봇을 사용할 사용자 (telegram_config.json에 정의된 사용자 이름)")
     from_chat_id: int = Field(..., description="원본 채팅 ID")
     to_chat_id:   int = Field(..., description="전달 대상 채팅 ID")
     message_id:   int = Field(..., description="전달할 메시지 ID")
@@ -51,6 +53,7 @@ class ForwardMessageInput(BaseModel):
 
 class ForwardMessagesInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    user:         Optional[str] = Field(default=None, description="봇을 사용할 사용자 (telegram_config.json에 정의된 사용자 이름)")
     from_chat_id: int       = Field(..., description="원본 채팅 ID")
     to_chat_id:   int       = Field(..., description="전달 대상 채팅 ID")
     message_ids:  list[int] = Field(..., description="전달할 메시지 ID 목록", min_length=1, max_length=100)
@@ -59,6 +62,7 @@ class ForwardMessagesInput(BaseModel):
 class CopyMessageInput(BaseModel):
     """포워드 마크 없이 메시지 내용만 복사"""
     model_config = ConfigDict(extra="forbid")
+    user:         Optional[str] = Field(default=None, description="봇을 사용할 사용자 (telegram_config.json에 정의된 사용자 이름)")
     from_chat_id: int           = Field(..., description="원본 채팅 ID")
     to_chat_id:   int           = Field(..., description="복사 대상 채팅 ID")
     message_id:   int           = Field(..., description="복사할 메시지 ID")
@@ -67,6 +71,7 @@ class CopyMessageInput(BaseModel):
 
 class CopyMessagesInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    user:         Optional[str] = Field(default=None, description="봇을 사용할 사용자 (telegram_config.json에 정의된 사용자 이름)")
     from_chat_id: int       = Field(..., description="원본 채팅 ID")
     to_chat_id:   int       = Field(..., description="복사 대상 채팅 ID")
     message_ids:  list[int] = Field(..., description="복사할 메시지 ID 목록", min_length=1, max_length=100)
@@ -98,7 +103,7 @@ async def telegram_get_updates(params: GetUpdatesInput) -> str:
         if params.offset is not None:
             payload["offset"] = params.offset
 
-        result  = await _tg("getUpdates", payload)
+        result  = await _tg("getUpdates", payload, user=params.user)
         updates = result.get("result", [])
 
         if not updates:
@@ -138,13 +143,15 @@ async def telegram_send_message(params: SendMessageInput) -> str:
         str: 전송 성공 메시지 또는 에러
     """
     try:
+        chat_id = get_chat_id(params.user)
         result = await _tg("sendMessage", {
-            "chat_id":    params.chat_id,
+            "chat_id":    chat_id,
             "text":       params.text,
             "parse_mode": params.parse_mode
-        })
+        }, user=params.user)
         msg_id = result.get("result", {}).get("message_id", "?")
-        return f"✅ 전송 완료 (message_id: {msg_id})"
+        user_name = params.user or DEFAULT_USER
+        return f"✅ {user_name}에게 전송 완료 (message_id: {msg_id})"
     except Exception as e:
         return _err(e)
 
@@ -167,12 +174,13 @@ async def telegram_edit_message(params: EditMessageInput) -> str:
         str: 수정 성공 메시지 또는 에러
     """
     try:
+        chat_id = get_chat_id(params.user)
         result = await _tg("editMessageText", {
-            "chat_id":    params.chat_id,
+            "chat_id":    chat_id,
             "message_id": params.message_id,
             "text":       params.text,
             "parse_mode": params.parse_mode,
-        })
+        }, user=params.user)
         msg_id = result.get("result", {}).get("message_id", "?")
         return f"✏️ 메시지 수정 완료 (message_id: {msg_id})"
     except Exception as e:
@@ -195,10 +203,11 @@ async def telegram_delete_message(params: DeleteMessageInput) -> str:
         str: 삭제 성공 메시지 또는 에러
     """
     try:
+        chat_id = get_chat_id(params.user)
         await _tg("deleteMessage", {
-            "chat_id":    params.chat_id,
+            "chat_id":    chat_id,
             "message_id": params.message_id,
-        })
+        }, user=params.user)
         return f"🗑️ 메시지 삭제 완료 (message_id: {params.message_id})"
     except Exception as e:
         return _err(e)
@@ -211,10 +220,11 @@ async def telegram_delete_message(params: DeleteMessageInput) -> str:
 async def telegram_delete_messages(params: DeleteMessagesInput) -> str:
     """텔레그램 채팅에서 여러 메시지를 한 번에 삭제합니다."""
     try:
+        chat_id = get_chat_id(params.user)
         await _tg("deleteMessages", {
-            "chat_id":     params.chat_id,
+            "chat_id":     chat_id,
             "message_ids": params.message_ids,
-        })
+        }, user=params.user)
         return f"🗑️ 메시지 {len(params.message_ids)}개 삭제 완료"
     except Exception as e:
         return _err(e)
@@ -241,7 +251,7 @@ async def telegram_forward_message(params: ForwardMessageInput) -> str:
             "chat_id":      params.to_chat_id,
             "from_chat_id": params.from_chat_id,
             "message_id":   params.message_id,
-        })
+        }, user=params.user)
         msg_id = result.get("result", {}).get("message_id", "?")
         return f"↪️ 메시지 포워드 완료 (새 message_id: {msg_id})"
     except Exception as e:
@@ -259,7 +269,7 @@ async def telegram_forward_messages(params: ForwardMessagesInput) -> str:
             "chat_id":      params.to_chat_id,
             "from_chat_id": params.from_chat_id,
             "message_ids":  params.message_ids,
-        })
+        }, user=params.user)
         msg_ids = result.get("result", [])
         ids_str = ", ".join(str(m.get("message_id", "?")) for m in msg_ids) if isinstance(msg_ids, list) else "?"
         return f"↪️ 메시지 {len(params.message_ids)}개 포워드 완료 (새 message_ids: {ids_str})"
@@ -292,7 +302,7 @@ async def telegram_copy_message(params: CopyMessageInput) -> str:
         }
         if params.caption:
             payload["caption"] = params.caption
-        result = await _tg("copyMessage", payload)
+        result = await _tg("copyMessage", payload, user=params.user)
         msg_id = result.get("result", {}).get("message_id", "?")
         return f"📋 메시지 복사 완료 (새 message_id: {msg_id})"
     except Exception as e:
@@ -310,7 +320,7 @@ async def telegram_copy_messages(params: CopyMessagesInput) -> str:
             "chat_id":      params.to_chat_id,
             "from_chat_id": params.from_chat_id,
             "message_ids":  params.message_ids,
-        })
+        }, user=params.user)
         msg_ids = result.get("result", [])
         ids_str = ", ".join(str(m.get("message_id", "?")) for m in msg_ids) if isinstance(msg_ids, list) else "?"
         return f"📋 메시지 {len(params.message_ids)}개 복사 완료 (새 message_ids: {ids_str})"
