@@ -236,6 +236,15 @@ graph TB
 - `telegram_monitor.py`는 User API 사용 → 개인 계정 로그인 필요 (봇 아님)
 
 ---
+
+## Contributors
+
+| 이름 | 역할 |
+|------|------|
+| **Ga yeon Lee** ([@ruchiayeon](https://github.com/ruchiayeon)) | Creator & Developer |
+| **Claude** (Anthropic) | AI Pair Programmer |
+
+---
 ---
 
 # AI Instructions (LLM Context)
