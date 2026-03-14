@@ -244,6 +244,10 @@ graph TB
 | **Gayeon Lee** ([@ruchiayeon](https://github.com/ruchiayeon)) | Creator & Developer |
 | **Claude** (Anthropic) | AI Pair Programmer |
 
+## Contact
+
+- Email: ruchia10326@gmail.com
+
 ---
 
 # AI Instructions (LLM Context)
