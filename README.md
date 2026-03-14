@@ -241,7 +241,7 @@ graph TB
 
 | 이름 | 역할 |
 |------|------|
-| **Ga yeon Lee** ([@ruchiayeon](https://github.com/ruchiayeon)) | Creator & Developer |
+| **Gayeon Lee** ([@ruchiayeon](https://github.com/ruchiayeon)) | Creator & Developer |
 | **Claude** (Anthropic) | AI Pair Programmer |
 
 ---
