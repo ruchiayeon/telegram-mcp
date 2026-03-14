@@ -245,7 +245,6 @@ graph TB
 | **Claude** (Anthropic) | AI Pair Programmer |
 
 ---
----
 
 # AI Instructions (LLM Context)
 
